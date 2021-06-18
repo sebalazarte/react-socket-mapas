@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { v4 } from 'uuid';
+import { Subject } from 'rxjs'
 
 export const useMapbox = (puntoInicial) => {
 
@@ -16,6 +17,41 @@ export const useMapbox = (puntoInicial) => {
     // const [mapa, setMapa] = useState();
     const mapa = useRef();
     const [coords, setCoords] = useState(puntoInicial);
+
+    //observables de Rxjs
+    const movimientoMarcador = useRef(new Subject());;
+    const nuevoMarcador = useRef(new Subject());
+
+    const agregarMarcador = useCallback((ev) => {
+
+        const { lng, lat } = ev.lngLat;
+        const marker = new mapboxgl.Marker();
+        marker.id = v4();
+        marker
+            .setLngLat([lng, lat])
+            .addTo(mapa.current)
+            .setDraggable(true);
+
+        marcadores.current[marker.id] = marker;
+
+        nuevoMarcador.current.next({
+            id: marker.id,
+            lng,
+            lat
+        });
+
+        marker.on('drag', ({ target }) => {
+            const { id } = target;
+            const { lng, lat } = target.getLngLat();
+
+            movimientoMarcador.current.next({
+                id,
+                lng,
+                lat
+            });
+        });
+
+    }, [])
 
     useEffect(() => {
         const map = new mapboxgl.Map({
@@ -47,26 +83,20 @@ export const useMapbox = (puntoInicial) => {
     useEffect(() => {
 
         mapa.current?.on('click', (ev) => {
-
-            const { lng, lat } = ev.lngLat;
-            const marker = new mapboxgl.Marker();
-            marker.id = v4();
-            marker
-                .setLngLat([lng, lat])
-                .addTo(mapa.current)
-                .setDraggable(true);
-            
-            marcadores.current[marker.id] = marker;
+            agregarMarcador(ev);
         })
 
         return () => {
             mapa.current?.off('click');
         }
-    }, [])
+    }, [agregarMarcador])
 
     return {
         coords,
         setRef,
-        marcadores
+        marcadores,
+        agregarMarcador,
+        nuevoMarcador$: nuevoMarcador.current,
+        movimientoMarcador$: movimientoMarcador.current
     }
 }
